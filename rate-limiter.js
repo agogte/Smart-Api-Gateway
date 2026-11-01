@@ -1,6 +1,6 @@
 const RateLimiterAlgorithm = Object.freeze({
-  SLIDING_WINDOW: 'sliding-window',
-  TOKEN_BUCKET: 'token-bucket',
+  SLIDING_WINDOW: "sliding-window",
+  TOKEN_BUCKET: "token-bucket",
 });
 
 const requestTimestamps = new Map();
@@ -22,7 +22,7 @@ const slidingWindowLimiter = (rateLimit, windowSize) => (req, res, next) => {
   if (timestamps.length >= rateLimit) {
     return res.status(429).json({
       error: "Rate limit exceeded. Please try again later.",
-      retryAfter: `${Math.ceil((timestamps[0] + windowSize - currentTime) / 1000)} seconds`
+      retryAfter: `${Math.ceil((timestamps[0] + windowSize - currentTime) / 1000)} seconds`,
     });
   }
 
@@ -51,7 +51,7 @@ const tokenBucketLimiter = (rateLimit, windowSize) => (req, res, next) => {
     const msUntilToken = Math.ceil((1 - bucket.tokens) / refillRate);
     return res.status(429).json({
       error: "Rate limit exceeded. Please try again later.",
-      retryAfter: `${Math.ceil(msUntilToken / 1000)} seconds`
+      retryAfter: `${Math.ceil(msUntilToken / 1000)} seconds`,
     });
   }
 
@@ -62,11 +62,11 @@ const tokenBucketLimiter = (rateLimit, windowSize) => (req, res, next) => {
 const rateLimiter = (
   RATE_LIMIT = 5,
   WINDOW_SIZE = 60 * 1000,
-  algorithm = RateLimiterAlgorithm.SLIDING_WINDOW
+  algorithm = RateLimiterAlgorithm.SLIDING_WINDOW,
 ) => {
-  if (algorithm === RateLimiterAlgorithm.TOKEN_BUCKET) {
+  if (algorithm === RateLimiterAlgorithm.TOKEN_BUCKET)
     return tokenBucketLimiter(RATE_LIMIT, WINDOW_SIZE);
-  }
+
   return slidingWindowLimiter(RATE_LIMIT, WINDOW_SIZE);
 };
 
