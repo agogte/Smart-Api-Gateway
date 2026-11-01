@@ -131,3 +131,19 @@ Using `http-proxy` instead of redirect-based load balancing has three systemic a
 **Response transformation is possible.** Injecting headers, rewriting responses, and streaming partial results all require the proxy to see the response bytes. Redirects hand control to the client — the gateway gets no further visibility into what the backend returned.
 
 The tradeoff is latency: every request makes two TCP connections (client→gateway, gateway→backend) instead of one. For a service where backends and gateway are colocated (same VPC or same machine), this round-trip cost is under 1ms and worth the control it buys.
+
+---
+
+## 6. Health checks and health/CPU-based routing
+
+### Active checks with thresholds
+
+The gateway polls each backend's `/health` endpoint on a fixed interval instead of inferring health from live traffic. That way a backend is taken out of rotation before real users hit it, and it can be detected as recovered without sending users to it as a test. A server needs 2 consecutive failures to be marked unhealthy and 2 consecutive successes to come back. A single threshold of 1 would flap a server in and out on every lost packet; higher thresholds make the gateway slower to react. Two is a common middle ground.
+
+### Health-based: tiers, not weights
+
+`healthy` servers always win over `degraded` ones, and `degraded` servers are only a fallback. A degraded server usually means "I'm still answering but something is wrong" (a slow dependency, a full disk), so sending it a share of traffic just spreads the problem. Keeping it in reserve means users still get an answer if every healthy server drops out.
+
+### CPU-based: weighted random instead of least-loaded
+
+CPU numbers are only as fresh as the last health check (5s by default). If the gateway always picked the server with the lowest reported CPU, every request in that 5s window would land on the same backend. Its CPU would spike, the next check would pick a different server, and load would swing between backends. Weighting by headroom (`100 - cpu`) still sends most traffic to lightly loaded servers, but spreads it, so the stale reading does less damage.

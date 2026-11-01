@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Load Balancer Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+    --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+    --meter-track: #e1e0d9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+      --meter-track: #2c2c2a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    --meter-track: #2c2c2a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  .sub { color: var(--text-secondary); font-size: 12px; margin: 0 0 12px; }
+  .meta { color: var(--text-secondary); font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+  .chip {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface);
+    font-size: 12px; color: var(--text-primary);
+  }
+  .live::before {
+    content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--good); margin-right: 6px; vertical-align: 0;
+  }
+  .live.stale::before { background: var(--critical); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .kpi .label { color: var(--text-secondary); font-size: 12px; }
+  .kpi .value { font-size: 28px; font-weight: 600; margin-top: 4px; line-height: 1.1; }
+  .kpi .value small { font-size: 14px; font-weight: 400; color: var(--text-secondary); }
+  .kpi .hint { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 2;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap;
+  }
+  .tooltip .row { display: flex; align-items: center; gap: 6px; }
+  .tooltip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .tooltip b { font-weight: 600; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+  .axis text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; }
+  .status svg { width: 14px; height: 14px; flex: none; }
+  .meter { display: inline-flex; align-items: center; gap: 8px; }
+  .meter .track { width: 80px; height: 6px; border-radius: 3px; background: var(--meter-track); overflow: hidden; }
+  .meter .fill { display: block; height: 100%; border-radius: 3px; background: var(--series-1); }
+  .error { color: var(--critical); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Load Balancer Dashboard</h1>
+    <div class="meta">
+      <span class="chip" id="strategy">strategy: …</span>
+      <span id="uptime">uptime …</span>
+      <span class="live" id="live">connecting…</span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Key metrics">
+    <div class="card kpi"><div class="label">Requests / sec</div><div class="value" id="k-rps">–</div><div class="hint">10s average</div></div>
+    <div class="card kpi"><div class="label">Total requests</div><div class="value" id="k-total">–</div><div class="hint" id="k-success">–</div></div>
+    <div class="card kpi"><div class="label">Error rate (5xx)</div><div class="value" id="k-errors">–</div><div class="hint" id="k-errors-n">–</div></div>
+    <div class="card kpi"><div class="label">Rate limited (429)</div><div class="value" id="k-limited">–</div><div class="hint" id="k-limited-n">–</div></div>
+    <div class="card kpi"><div class="label">Latency p95</div><div class="value" id="k-p95">–</div><div class="hint" id="k-lat">–</div></div>
+    <div class="card kpi"><div class="label">Available servers</div><div class="value" id="k-healthy">–</div><div class="hint" id="k-healthy-hint">–</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="card chart">
+      <h2>CPU utilization by server</h2>
+      <p class="sub">% reported by each server's health check</p>
+      <div class="legend" id="cpu-legend"></div>
+      <svg id="cpu-chart" role="img" aria-label="CPU utilization over time per server"></svg>
+      <div class="tooltip" id="cpu-tip"></div>
+    </div>
+    <div class="card chart">
+      <h2>Throughput</h2>
+      <p class="sub">Requests per second by outcome, last 2 minutes</p>
+      <div class="legend" id="rps-legend"></div>
+      <svg id="rps-chart" role="img" aria-label="Requests per second by outcome"></svg>
+      <div class="tooltip" id="rps-tip"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Servers</h2>
+    <p class="sub">Health and traffic per backend</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Server</th><th>Status</th><th>CPU</th>
+            <th class="num">Check latency</th><th class="num">Checks passed</th>
+            <th class="num">Requests</th><th class="num">Share</th>
+            <th class="num">Errors</th><th class="num">Avg latency</th>
+          </tr>
+        </thead>
+        <tbody id="servers"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+// ?theme=dark or ?theme=light overrides the OS color scheme.
+const theme = new URLSearchParams(location.search).get("theme");
+if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+
+const POLL_MS = 1000;
+const SVG_NS = "http://www.w3.org/2000/svg";
+const SERIES = 8; // categorical slots; servers past the 8th are table-only
+
+// Status never relies on color alone: each state has an icon and a label.
+const STATUS = {
+  healthy:   { color: "var(--good)",     label: "Healthy",   icon: '<circle cx="7" cy="7" r="6" fill="var(--good)"/><path d="M4 7.2l2 2 4-4.2" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' },
+  degraded:  { color: "var(--warning)",  label: "Degraded",  icon: '<path d="M7 1l6.2 11H.8z" fill="var(--warning)"/><path d="M7 5v3.2M7 10v.1" stroke="#0b0b0b" stroke-width="1.6" stroke-linecap="round"/>' },
+  unhealthy: { color: "var(--critical)", label: "Unhealthy", icon: '<circle cx="7" cy="7" r="6" fill="var(--critical)"/><path d="M4.8 4.8l4.4 4.4M9.2 4.8l-4.4 4.4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>' },
+  unknown:   { color: "var(--text-muted)", label: "Unknown", icon: '<circle cx="7" cy="7" r="5.2" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="2 2"/>' },
+};
+
+const OUTCOMES = [
+  { key: "success",     label: "Success",       color: "var(--good)" },
+  { key: "rateLimited", label: "Rate limited",  color: "var(--warning)" },
+  { key: "errors",      label: "Errors (5xx)",  color: "var(--critical)" },
+];
+
+const $ = (id) => document.getElementById(id);
+const seriesColor = (i) => `var(--series-${i + 1})`;
+const shortName = (url) => url.replace(/^https?:\/\//, "");
+const fmt = (n) => (n == null ? "–" : n.toLocaleString());
+const pct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : "0%");
+const ms = (n) => (n == null ? "–" : `${n} ms`);
+const timeLabel = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const duration = (s) => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
+};
+
+function el(tag, attrs = {}, parent) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+// Shared frame: recessive gridlines at 0/25/50/75/100% of yMax, baseline, x tick labels.
+function frame(svg, { yMax, yFormat, xStart, xEnd }) {
+  svg.innerHTML = "";
+  const W = svg.clientWidth || 400, H = svg.clientHeight || 220;
+  const m = { top: 8, right: 72, bottom: 22, left: 36 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const x = (t) => m.left + ((t - xStart) / Math.max(1, xEnd - xStart)) * iw;
+  const y = (v) => m.top + ih - (v / yMax) * ih;
+  const axis = el("g", { class: "axis" }, svg);
+  for (let i = 0; i <= 4; i++) {
+    const v = (yMax / 4) * i;
+    el("line", { x1: m.left, x2: m.left + iw, y1: y(v), y2: y(v), stroke: i === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }, axis);
+    const label = el("text", { x: m.left - 6, y: y(v) + 4, "text-anchor": "end" }, axis);
+    label.textContent = yFormat(v);
+  }
+  [[xStart, "start"], [xEnd, "end"]].forEach(([t, anchor]) => {
+    const label = el("text", { x: x(t), y: H - 4, "text-anchor": anchor }, axis);
+    label.textContent = timeLabel(t);
+  });
+  return { W, H, m, iw, ih, x, y };
+}
+
+function positionTip(tip, svg, px, py) {
+  const box = svg.getBoundingClientRect(), parent = svg.parentElement.getBoundingClientRect();
+  tip.style.display = "block";
+  const left = Math.min(box.left - parent.left + px + 12, parent.width - tip.offsetWidth - 8);
+  tip.style.left = `${Math.max(8, left)}px`;
+  tip.style.top = `${box.top - parent.top + py - tip.offsetHeight / 2}px`;
+}
+
+function renderLegend(container, items) {
+  container.innerHTML = items.map((it) => `<span><i style="background:${it.color}"></i>${it.label}</span>`).join("");
+}
+
+// CPU line chart: one 2px line per server, direct label at the line end, crosshair tooltip.
+let cpuState = null;
+function renderCpu(data) {
+  const svg = $("cpu-chart");
+  const servers = data.servers.slice(0, SERIES);
+  const times = servers.flatMap((s) => s.history.map((h) => h.t));
+  renderLegend($("cpu-legend"), servers.map((s, i) => ({ label: shortName(s.url), color: seriesColor(i) })));
+  if (!times.length) { svg.innerHTML = ""; return; }
+
+  const xStart = Math.min(...times), xEnd = Math.max(...times);
+  const f = frame(svg, { yMax: 100, yFormat: (v) => `${v}%`, xStart, xEnd });
+  const plot = el("g", {}, svg);
+
+  servers.forEach((s, i) => {
+    // Break the line wherever a check produced no CPU reading.
+    let d = "", pen = false;
+    s.history.forEach((h) => {
+      if (h.cpu == null) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${f.x(h.t).toFixed(1)},${f.y(h.cpu).toFixed(1)}`;
+      pen = true;
+    });
+    el("path", { d, fill: "none", stroke: seriesColor(i), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, plot);
+  });
+
+  // Direct labels at the right edge, nudged apart so they don't collide.
+  const ends = servers.map((s, i) => {
+    const last = [...s.history].reverse().find((h) => h.cpu != null);
+    return last && { i, name: shortName(s.url).replace("localhost:", ":"), cpu: last.cpu, y: f.y(last.cpu) };
+  }).filter(Boolean).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 13);
+  const labels = el("g", { class: "axis" }, svg);
+  ends.forEach((e) => {
+    el("circle", { cx: f.m.left + f.iw, cy: f.y(e.cpu), r: 3, fill: seriesColor(e.i), stroke: "var(--surface)", "stroke-width": 2 }, labels);
+    const t = el("text", { x: f.m.left + f.iw + 8, y: e.y + 4, fill: "var(--text-secondary)" }, labels);
+    t.textContent = `${e.name} ${e.cpu}%`;
+  });
+
+  cpuState = { f, servers };
+  attachCrosshair(svg, $("cpu-tip"), f, () => cpuState, (state, t) => {
+    const rows = state.servers.map((s, i) => {
+      const h = s.history.reduce((best, p) => (!best || Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), null);
+      return h && { i, name: shortName(s.url), value: h.cpu == null ? "no data" : `${h.cpu}%`, t: h.t };
+    }).filter(Boolean);
+    return { t: rows[0]?.t ?? t, rows: rows.map((r) => ({ color: seriesColor(r.i), label: r.name, value: r.value })) };
+  });
+}
+
+// Throughput: stacked bars per second, 2px surface gap between segments.
+let rpsState = null;
+function renderRps(data) {
+  const svg = $("rps-chart");
+  const buckets = data.timeseries.slice(0, -1); // the current second is still filling
+  renderLegend($("rps-legend"), OUTCOMES);
+  if (!buckets.length) { svg.innerHTML = ""; return; }
+
+  const totals = buckets.map((b) => b.success + b.rateLimited + b.errors);
+  // Rounded up to a multiple of 4 so the quarter gridlines land on whole requests.
+  const yMax = Math.ceil(niceMax(Math.max(4, ...totals)) / 4) * 4;
+  const xStart = buckets[0].t, xEnd = buckets[buckets.length - 1].t;
+  const f = frame(svg, { yMax, yFormat: (v) => fmt(Math.round(v)), xStart, xEnd });
+  const slot = f.iw / Math.max(1, (xEnd - xStart) / 1000 + 1);
+  const bw = Math.max(1, slot - 2);
+  const plot = el("g", {}, svg);
+
+  buckets.forEach((b) => {
+    let base = 0;
+    const cx = f.x(b.t);
+    OUTCOMES.forEach(({ key, color }) => {
+      const v = b[key];
+      if (!v) return;
+      const y0 = f.y(base), y1 = f.y(base + v);
+      const h = Math.max(0, y0 - y1 - (base > 0 ? 2 : 0));
+      if (h > 0) el("rect", { x: cx - bw / 2, y: y1, width: bw, height: h, fill: color, rx: Math.min(2, bw / 2) }, plot);
+      base += v;
+    });
+  });
+
+  rpsState = { f, buckets };
+  attachCrosshair(svg, $("rps-tip"), f, () => rpsState, (state, t) => {
+    const b = state.buckets.reduce((best, p) => (!best || Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), null);
+    return { t: b.t, rows: OUTCOMES.map((o) => ({ color: o.color, label: o.label, value: fmt(b[o.key]) })) };
+  });
+}
+
+function niceMax(v) {
+  const step = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const k of [1, 2, 2.5, 5, 10]) if (k * step >= v) return k * step;
+  return 10 * step;
+}
+
+// Hover layer: vertical crosshair + tooltip. The whole plot area is the hit target.
+function attachCrosshair(svg, tip, f, getState, describe) {
+  const line = el("line", { y1: f.m.top, y2: f.m.top + f.ih, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const hit = el("rect", { x: f.m.left, y: f.m.top, width: f.iw, height: f.ih, fill: "transparent" }, svg);
+  const show = (evt) => {
+    const state = getState();
+    const box = svg.getBoundingClientRect();
+    const px = ((evt.clientX - box.left) / box.width) * state.f.W;
+    const t = invert(state.f, px);
+    const { t: snapped, rows } = describe(state, t);
+    const sx = state.f.x(snapped);
+    line.setAttribute("x1", sx); line.setAttribute("x2", sx); line.setAttribute("visibility", "visible");
+    tip.innerHTML = `<div style="color:var(--text-secondary);margin-bottom:4px">${timeLabel(snapped)}</div>` +
+      rows.map((r) => `<div class="row"><i style="background:${r.color}"></i>${r.label}<b>${r.value}</b></div>`).join("");
+    positionTip(tip, svg, (sx / state.f.W) * box.width, ((state.f.m.top + state.f.ih / 2) / state.f.H) * box.height);
+  };
+  hit.addEventListener("mousemove", (evt) => { svg._hover = evt; show(evt); });
+  hit.addEventListener("mouseleave", () => { svg._hover = null; tip.style.display = "none"; line.setAttribute("visibility", "hidden"); });
+  // The chart is redrawn every poll; keep the tooltip in place if the pointer is still over it.
+  if (svg._hover) show(svg._hover);
+}
+
+function invert(f, px) {
+  // x(t) is linear, so recover t from two reference points.
+  const a = f.x(0), b = f.x(1000);
+  return ((px - a) / (b - a)) * 1000;
+}
+
+function renderKpis(d) {
+  const t = d.totals;
+  $("strategy").textContent = `strategy: ${d.strategy}`;
+  $("uptime").textContent = `uptime ${duration(d.uptimeSeconds)}`;
+  $("k-rps").textContent = d.requestsPerSecond ?? "–";
+  $("k-total").textContent = fmt(t.requests);
+  $("k-success").textContent = `${fmt(t.success)} succeeded`;
+  $("k-errors").textContent = pct(t.errors, t.requests);
+  $("k-errors-n").textContent = `${fmt(t.errors)} requests`;
+  $("k-limited").textContent = pct(t.rateLimited, t.requests);
+  $("k-limited-n").textContent = `${fmt(t.rateLimited)} requests`;
+  $("k-p95").innerHTML = d.latency.p95 == null ? "–" : `${d.latency.p95}<small> ms</small>`;
+  $("k-lat").textContent = `p50 ${ms(d.latency.p50)} · p99 ${ms(d.latency.p99)}`;
+  const available = d.servers.filter((s) => s.status === "healthy" || s.status === "degraded").length;
+  const degraded = d.servers.filter((s) => s.status === "degraded").length;
+  $("k-healthy").innerHTML = `${available}<small> / ${d.servers.length}</small>`;
+  $("k-healthy-hint").textContent = degraded ? `${degraded} degraded` : "none degraded";
+}
+
+function renderTable(d) {
+  const proxied = d.servers.reduce((sum, s) => sum + s.requests, 0);
+  $("servers").innerHTML = d.servers.map((s, i) => {
+    const st = STATUS[s.status] ?? STATUS.unknown;
+    const swatch = i < SERIES ? `<span class="swatch" style="background:${seriesColor(i)}"></span>` : "";
+    const cpu = s.cpu == null ? "–" :
+      `<span class="meter"><span class="track"><span class="fill" style="width:${s.cpu}%"></span></span>${s.cpu}%</span>`;
+    return `<tr>
+      <td>${swatch}${shortName(s.url)}</td>
+      <td><span class="status"><svg viewBox="0 0 14 14" aria-hidden="true">${st.icon}</svg>${st.label}</span></td>
+      <td>${cpu}</td>
+      <td class="num">${ms(s.healthLatency)}</td>
+      <td class="num">${s.checks ? `${pct(s.passedChecks, s.checks)} <span style="color:var(--text-muted)">(${s.passedChecks}/${s.checks})</span>` : "–"}</td>
+      <td class="num">${fmt(s.requests)}</td>
+      <td class="num">${pct(s.requests, proxied)}</td>
+      <td class="num">${fmt(s.errors)}</td>
+      <td class="num">${ms(s.avgLatency)}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function poll() {
+  const live = $("live");
+  try {
+    const res = await fetch("/lb/metrics", { cache: "no-store" });
+    const data = await res.json();
+    renderKpis(data);
+    renderCpu(data);
+    renderRps(data);
+    renderTable(data);
+    live.classList.remove("stale");
+    live.textContent = `live · updated ${timeLabel(data.now)}`;
+  } catch {
+    live.classList.add("stale");
+    live.textContent = "disconnected – retrying";
+  }
+  setTimeout(poll, POLL_MS);
+}
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "smart-api-gateway",
+  "version": "1.0.0",
+  "description": "Load balancer with health checks, rate limiting and a live dashboard, built on Express",
+  "private": true,
+  "main": "Api.js",
+  "scripts": {
+    "start": "node Api.js",
+    "servers": "node server.js",
+    "load-test": "node load-test.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "http-proxy": "^1.18.1"
+  }
+}
